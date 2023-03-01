@@ -1,0 +1,54 @@
+
+
+#ifndef __DRIVER_VGA_H
+#define __DRIVER_VGA_H
+
+
+#include "common/types.h"
+#include "hardwarecommunication/port.h"
+#include "driver.h"
+#include "hardwarecommunication/interrupts.h"
+
+#include "gui/color.h"
+
+class VideoGraphicsArray{
+protected:
+	Port8Bit misc_port;
+	Port8Bit crtc_index_port;
+	Port8Bit crtc_data_port;
+	Port8Bit sequence_data_port;
+	Port8Bit sequence_index_port;
+	Port8Bit graphics_controller_index_port;
+	Port8Bit graphics_controller_data_port;
+	Port8Bit attribute_controller_index_port;
+	Port8Bit attribute_controller_write_port;
+	Port8Bit attribute_controller_read_port;
+	Port8Bit attribute_controller_reset_port;
+
+
+	void writeRegisters(uint8_t* registers);// send initialition code to corresponding port
+	uint8_t* getFrameBufferSegment(); //give us the correct location of the framebuffer segments
+
+
+
+	virtual uint8_t getColorIndex(uint8_t r,uint8_t g,uint8_t b);
+	virtual void putPixel(uint32_t x,uint32_t y,uint8_t color_index);
+
+
+public:
+	VideoGraphicsArray();
+	 ~VideoGraphicsArray();
+
+	virtual bool setMode(uint32_t width,uint32_t height,uint32_t color_depth);
+	virtual bool supportMode(uint32_t width,uint32_t height,uint32_t color_depth);
+
+	virtual void putPixel(uint32_t x,uint32_t y,uint8_t r,uint8_t g,uint8_t b);
+
+	virtual void fillRectangle(uint32_t x,uint32_t y,uint32_t w,uint32_t h,Color color);
+};
+
+
+
+
+
+#endif

@@ -1,0 +1,168 @@
+
+
+#include "driver/vga.h"
+unsigned char g_320x200x256[] =	{
+		/* MISC */
+			0x63,
+		/* SEQ */
+			0x03, 0x01, 0x0F, 0x00, 0x0E,
+		/* CRTC */
+			0x5F, 0x4F, 0x50, 0x82, 0x54, 0x80, 0xBF, 0x1F,
+			0x00, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x9C, 0x0E, 0x8F, 0x28,	0x40, 0x96, 0xB9, 0xA3,
+			0xFF,
+		/* GC */
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x05, 0x0F,
+			0xFF,
+		/* AC */
+			0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+			0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+			0x41, 0x00, 0x0F, 0x00,	0x00
+};
+
+void printf(char* str);
+VideoGraphicsArray::VideoGraphicsArray():
+	misc_port(0x3c2),
+	crtc_index_port(0x3d4),
+	crtc_data_port(0x3d5),
+	sequence_index_port(0x3c4),
+	sequence_data_port(0x3c5),
+	graphics_controller_index_port(0x3ce),
+	graphics_controller_data_port(0x3cf),
+	attribute_controller_index_port(0x3c0),
+	attribute_controller_read_port(0x3c1),
+	attribute_controller_write_port(0x3c0),
+	attribute_controller_reset_port(0x3da){
+
+
+}
+VideoGraphicsArray::~VideoGraphicsArray(){
+
+}
+
+void VideoGraphicsArray::writeRegisters(uint8_t* registers){	
+
+	misc_port.Write(*(registers++));
+	for(uint8_t i=0;i<5;++i){
+		sequence_index_port.Write(i);
+		sequence_data_port.Write(*(registers++));
+	}
+
+
+	crtc_index_port.Write(0x03);
+	crtc_data_port.Write(crtc_data_port.Read() | 0x80);
+
+	crtc_index_port.Write(0x11);
+	crtc_data_port.Write(crtc_data_port.Read()  & ~0x80);
+
+	registers[0x03] = registers[0x03] | 0x80;
+	registers[0x11] = registers[0x11] & ~0x80;
+
+
+	for(uint8_t i=0;i<25;++i){
+
+		crtc_index_port.Write(i);
+		crtc_data_port.Write(*(registers++));
+
+	}
+
+	for(uint8_t i=0;i<9;++i){
+		graphics_controller_index_port.Write(i);
+		graphics_controller_data_port.Write(*(registers++));
+	}
+
+	for(uint8_t i=0;i<21;++i){
+		attribute_controller_reset_port.Read();
+		attribute_controller_index_port.Write(i);
+		attribute_controller_write_port.Write(*(registers++));
+	}
+
+	attribute_controller_reset_port.Read();
+	attribute_controller_index_port.Write(0x20);
+
+}
+
+	
+
+
+
+
+bool VideoGraphicsArray::setMode(uint32_t width,uint32_t height,uint32_t color_depth){
+	printf("setMode{\n");
+
+// if store this array in stack,code will be blocked,why?
+// unsigned char g_320x200x256[] =	{
+// 		/* MISC */
+// 			0x63,
+// 		/* SEQ */
+// 			0x03, 0x01, 0x0F, 0x00, 0x0E,
+// 		/* CRTC */
+// 			0x5F, 0x4F, 0x50, 0x82, 0x54, 0x80, 0xBF, 0x1F,
+// 			0x00, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+// 			0x9C, 0x0E, 0x8F, 0x28,	0x40, 0x96, 0xB9, 0xA3,
+// 			0xFF,
+// 		/* GC */
+// 			0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x05, 0x0F,
+// 			0xFF,
+// 		/* AC */
+// 			0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+// 			0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+// 			0x41, 0x00, 0x0F, 0x00,	0x00
+// };
+
+
+
+	if(!supportMode(width,height,color_depth)){
+		return false;
+	}
+
+	
+	writeRegisters(g_320x200x256);
+	return true;
+}
+
+
+bool VideoGraphicsArray::supportMode(uint32_t width,uint32_t height,uint32_t color_depth){
+	return width ==320 && height==200 && color_depth==8;
+}
+
+void VideoGraphicsArray::putPixel(uint32_t x,uint32_t y,uint8_t r,uint8_t g,uint8_t b){
+
+	putPixel(x,y,getColorIndex(r,g,b));
+}
+
+uint8_t* VideoGraphicsArray::getFrameBufferSegment(){
+	graphics_controller_index_port.Write(0x06);
+	uint8_t segment_num =  graphics_controller_data_port.Read() & (3<<2);
+	switch(segment_num){
+		default:
+		case 0<<2: return (uint8_t*)0x00000;;
+		case 1<<2: return (uint8_t*)0xA0000;;
+		case 2<<2: return (uint8_t*)0xB0000;;
+		case 3<<2: return (uint8_t*)0xB8000;;
+	}
+}
+
+
+
+void VideoGraphicsArray::putPixel(uint32_t x,uint32_t y,uint8_t color_index){
+	uint8_t* pixel_addr = getFrameBufferSegment()+ 320*y+x;
+	*pixel_addr = color_index;
+}
+uint8_t VideoGraphicsArray::getColorIndex(uint8_t r,uint8_t g,uint8_t b){
+	if(r == 0x00 && g == 0x00 && b == 0x00) return 0x00; // black
+    if(r == 0x00 && g == 0x00 && b == 0xA8) return 0x01; // blue
+    if(r == 0x00 && g == 0xA8 && b == 0x00) return 0x02; // green
+    if(r == 0xA8 && g == 0x00 && b == 0x00) return 0x04; // red
+    if(r == 0xFF && g == 0xFF && b == 0xFF) return 0x3F; // white
+    return 0x00;
+}
+
+void VideoGraphicsArray::fillRectangle(uint32_t x,uint32_t y,uint32_t w,uint32_t h,Color color){
+    for(uint32_t Y=y;y<y+h;++Y){
+        for (uint32_t X = x; X < x+w; ++X)
+        {
+            putPixel(X,Y,color.r,color.g,color.b);
+        }
+    }
+}
